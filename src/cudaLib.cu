@@ -20,7 +20,7 @@ int runGpuSaxpy(int vectorSize) {
 	std::cout << "Hello GPU Saxpy!\n";
 
 	//	Insert code here
-	std::cout << "Lazy, you are!\n";
+	std::cout << "Lazy, you are! a\n";
 	std::cout << "Write code, you must\n";
 
 	return 0;
