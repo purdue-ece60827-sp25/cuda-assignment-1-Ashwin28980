@@ -13,6 +13,8 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort)
 __global__ 
 void saxpy_gpu (float* x, float* y, float scale, int size) {
 	//	Insert GPU SAXPY kernel code here
+	i = threadIdx.x + blockDim.x * blockIdx.x;
+	if (i < size)	y[i] += scale * x[i];
 }
 
 int runGpuSaxpy(int vectorSize) {
@@ -20,7 +22,74 @@ int runGpuSaxpy(int vectorSize) {
 	std::cout << "Hello GPU Saxpy!\n";
 
 	//	Insert code here
-	std::cout << "Lazy, you are! a\n";
+	// Initialize host and device varibales
+	float * x, * y, * y_dup;	// host (cpu) variables
+	float * x_d, * y_d;			// device (gpu) variables
+
+	// Memory allocation for host variables
+	x = (float *) malloc(vectorSize * sizeof(float));
+	y = (float *) malloc(vectorSize * sizeof(float));
+	y_dup = (float *) malloc(vectorSize * sizeof(float));
+
+	if (x == NULL || y == NULL || y_dup == NULL) {
+		printf("Unable to malloc memory ... Exiting!");
+		return -1;
+	}
+
+	// Allocate memory for device variables and copy values from host variables
+	cudaMalloc((void **) &x_d, vectorSize);
+	cudaMemcpy(x_d, x, vectorSize, cudaMemcpyHostToDevice);
+	cudaMalloc((void **) &y_d, vectorSize);
+	cudaMemcpy(y_d, y, vectorSize, cudaMemcpyHostToDevice);
+
+	// if (x == NULL || y == NULL || y_dup == NULL) {
+	// 	printf("Unable to malloc memory ... Exiting!");
+	// 	return -1;
+	// }
+
+
+	vectorInit(x, vectorSize);
+	vectorInit(y, vectorSize);
+	//	y_dup = y
+	std::memcpy(y_dup, y, vectorSize * sizeof(float));
+	float scale = 2.0f;
+
+	#ifndef DEBUG_PRINT_DISABLE 
+		printf("\n Adding vectors : \n");
+		printf(" scale = %f\n", scale);
+		printf(" x = { ");
+		for (int i = 0; i < 5; ++i) {
+			printf("%3.4f, ", x[i]);
+		}
+		printf(" ... }\n");
+		printf(" y = { ");
+		for (int i = 0; i < 5; ++i) {
+			printf("%3.4f, ", y[i]);
+		}
+		printf(" ... }\n");
+	#endif
+
+	saxpy_gpu(x, y, scale, vectorSize);
+	cudaMemcpy(y, y_d, vectorSize, cudaMemcpyDeviceToHost);
+
+	#ifndef DEBUG_PRINT_DISABLE 
+		printf(" y = { ");
+		for (int i = 0; i < 5; ++i) {
+			printf("%3.4f, ", y[i]);
+		}
+		printf(" ... }\n");
+	#endif
+
+	int errorCount = verifyVector(x, y, y_dup, scale, vectorSize);
+	std::cout << "Found " << errorCount << " / " << vectorSize << " errors \n";
+
+	cudaFree(x_d);
+	cudaFree(y_d);
+	free(x);
+	free(y);
+
+
+	std::cout << "Lazy, you are!\n";
 	std::cout << "Write code, you must\n";
 
 	return 0;
