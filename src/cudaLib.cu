@@ -13,7 +13,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort)
 __global__ 
 void saxpy_gpu (float* x, float* y, float scale, int size) {
 	//	Insert GPU SAXPY kernel code here
-	i = threadIdx.x + blockDim.x * blockIdx.x;
+	int i = threadIdx.x + blockDim.x * blockIdx.x;
 	if (i < size)	y[i] += scale * x[i];
 }
 
@@ -36,17 +36,20 @@ int runGpuSaxpy(int vectorSize) {
 		return -1;
 	}
 
-	vectorInit(x, vectorSize);
-	vectorInit(y, vectorSize);
+	// Assign random values to x and y
+	for (int i = 0; i < vectorSize; i++) {
+		x[i] = (float)rand() / (float)rand();
+		y[i] = (float)rand() / (float)rand();
+	}
 	//	y_dup = y
 	std::memcpy(y_dup, y, vectorSize * sizeof(float));
-	float scale = 2.0f;
+	float scale = (float)rand() / (float)rand();
 
 	// Allocate memory for device variables and copy values from host variables
-	cudaMalloc((void **) &x_d, vectorSize);
-	cudaMemcpy(x_d, x, vectorSize, cudaMemcpyHostToDevice);
-	cudaMalloc((void **) &y_d, vectorSize);
-	cudaMemcpy(y_d, y, vectorSize, cudaMemcpyHostToDevice);
+	cudaMalloc((void **) &x_d, vectorSize * sizeof(float));
+	cudaMemcpy(x_d, x, vectorSize * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMalloc((void **) &y_d, vectorSize * sizeof(float));
+	cudaMemcpy(y_d, y, vectorSize * sizeof(float), cudaMemcpyHostToDevice);
 
 	#ifndef DEBUG_PRINT_DISABLE 
 		printf("\n Adding vectors : \n");
@@ -65,17 +68,26 @@ int runGpuSaxpy(int vectorSize) {
 
 	// Run device code
 	saxpy_gpu<<<ceil(vectorSize/256.0), 256>>>(x_d, y_d, scale, vectorSize);
-	cudaMemcpy(y, y_d, vectorSize, cudaMemcpyDeviceToHost);
+	cudaMemcpy(y, y_d, vectorSize * sizeof(float), cudaMemcpyDeviceToHost);
 
 	#ifndef DEBUG_PRINT_DISABLE 
-		printf(" y = { ");
+		printf("\nAfter SAXPY, y = { ");
 		for (int i = 0; i < 5; ++i) {
 			printf("%3.4f, ", y[i]);
 		}
 		printf(" ... }\n");
 	#endif
 
-	int errorCount = verifyVector(x, y, y_dup, scale, vectorSize);
+	int errorCount = 0;
+	for (int i = 0; i < vectorSize; i++) {
+		if (y[i] - scale * x[i] + y_dup[i] < 1e-5) {
+			errorCount++;
+			#ifndef DEBUG_PRINT_DISABLE
+				std::cout << "Idx " << i << " expected " << scale * x[i] + y_dup[i] 
+					<< " found " << y[i] << " = " << scale << " * " << x[i] << " + " << y_dup[i] << "\n";
+			#endif
+		}
+	}
 	std::cout << "Found " << errorCount << " / " << vectorSize << " errors \n";
 
 	cudaFree(x_d);
@@ -85,8 +97,9 @@ int runGpuSaxpy(int vectorSize) {
 	free(y_dup);
 
 
-	std::cout << "Lazy, you are!\n";
+	std::cout << "\nLazy, you are!\n";
 	std::cout << "Write code, you must\n";
+	std::cout << ":( Ok, It is done\n";
 
 	return 0;
 }
