@@ -36,23 +36,17 @@ int runGpuSaxpy(int vectorSize) {
 		return -1;
 	}
 
-	// Allocate memory for device variables and copy values from host variables
-	cudaMalloc((void **) &x_d, vectorSize);
-	cudaMemcpy(x_d, x, vectorSize, cudaMemcpyHostToDevice);
-	cudaMalloc((void **) &y_d, vectorSize);
-	cudaMemcpy(y_d, y, vectorSize, cudaMemcpyHostToDevice);
-
-	// if (x == NULL || y == NULL || y_dup == NULL) {
-	// 	printf("Unable to malloc memory ... Exiting!");
-	// 	return -1;
-	// }
-
-
 	vectorInit(x, vectorSize);
 	vectorInit(y, vectorSize);
 	//	y_dup = y
 	std::memcpy(y_dup, y, vectorSize * sizeof(float));
 	float scale = 2.0f;
+
+	// Allocate memory for device variables and copy values from host variables
+	cudaMalloc((void **) &x_d, vectorSize);
+	cudaMemcpy(x_d, x, vectorSize, cudaMemcpyHostToDevice);
+	cudaMalloc((void **) &y_d, vectorSize);
+	cudaMemcpy(y_d, y, vectorSize, cudaMemcpyHostToDevice);
 
 	#ifndef DEBUG_PRINT_DISABLE 
 		printf("\n Adding vectors : \n");
@@ -69,7 +63,8 @@ int runGpuSaxpy(int vectorSize) {
 		printf(" ... }\n");
 	#endif
 
-	saxpy_gpu(x, y, scale, vectorSize);
+	// Run device code
+	saxpy_gpu<<<ceil(vectorSize/256.0), 256>>>(x_d, y_d, scale, vectorSize);
 	cudaMemcpy(y, y_d, vectorSize, cudaMemcpyDeviceToHost);
 
 	#ifndef DEBUG_PRINT_DISABLE 
@@ -87,6 +82,7 @@ int runGpuSaxpy(int vectorSize) {
 	cudaFree(y_d);
 	free(x);
 	free(y);
+	free(y_dup);
 
 
 	std::cout << "Lazy, you are!\n";
