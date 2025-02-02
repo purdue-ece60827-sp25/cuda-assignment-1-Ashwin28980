@@ -78,6 +78,7 @@ int runGpuSaxpy(int vectorSize) {
 		printf(" ... }\n");
 	#endif
 
+	// Verify saxpy operation using cpu
 	int errorCount = 0;
 	for (int i = 0; i < vectorSize; i++) {
 		if (y[i] - scale * x[i] + y_dup[i] < 1e-5) {
@@ -90,6 +91,7 @@ int runGpuSaxpy(int vectorSize) {
 	}
 	std::cout << "Found " << errorCount << " / " << vectorSize << " errors \n";
 
+	// Free memory
 	cudaFree(x_d);
 	cudaFree(y_d);
 	free(x);
@@ -99,7 +101,7 @@ int runGpuSaxpy(int vectorSize) {
 
 	std::cout << "\nLazy, you are!\n";
 	std::cout << "Write code, you must\n";
-	std::cout << ":( Ok, It is done\n";
+	std::cout << ":( Sorry. Done, it is\n";
 
 	return 0;
 }
@@ -119,6 +121,21 @@ int runGpuSaxpy(int vectorSize) {
 __global__
 void generatePoints (uint64_t * pSums, uint64_t pSumSize, uint64_t sampleSize) {
 	//	Insert code here
+	int idx = threadIdx.x + blockDim.x * blockIdx.x;
+	float x, y;
+
+	// Setup RNG
+	curandState_t rng;
+	curand_init(clock64(), idx, 0, &rng);
+
+    // Get points
+	if (idx < pSumSize) {
+		for (uint64_t i = 0; i < sampleSize; i++) {
+			x = curand_uniform(&rng);
+			y = curand_uniform(&rng);
+			pSums[idx] += (uint64_t) 1 - (uint64_t) (x*x + y*y);	// hit if distance from origin to (x, y) is less than 1
+		}
+	}
 }
 
 __global__ 
@@ -157,8 +174,36 @@ double estimatePi(uint64_t generateThreadCount, uint64_t sampleSize,
 	
 	double approxPi = 0;
 
-	//      Insert code here
+	//  Insert code here
+	// Initialize variables
+	uint64_t *pSums;
+	uint64_t *pSums_d;
+	double hits = 0;
+
+	pSums = (uint64_t *) malloc(generateThreadCount * sizeof(uint64_t));
+	cudaMalloc((void **) &pSums_d, generateThreadCount * sizeof(uint64_t));
+
+	if (pSums == NULL) {
+		printf("Unable to malloc memory ... Exiting!");
+		return -1;
+	}
+
+	// Generate points
+	generatePoints<<<ceil(generateThreadCount/256.0), 256>>>(pSums_d, generateThreadCount, sampleSize);
+	cudaMemcpy(pSums, pSums_d, generateThreadCount * sizeof(uint64_t), cudaMemcpyDeviceToHost);
+
+	// Calculate hits
+	for (uint64_t i = 0; i < generateThreadCount; i++) {
+		hits += pSums[i];
+	}
+
+	// Calculate pi
+	approxPi = 4.0 * hits / ((double)sampleSize *(double)generateThreadCount);
+
+	free(pSums);
+	cudaFree(pSums_d);
+
 	std::cout << "Sneaky, you are ...\n";
-	std::cout << "Compute pi, you must!\n";
+	std::cout << "Compute pi, you must!\n\n";
 	return approxPi;
 }
